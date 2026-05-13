@@ -1,13 +1,24 @@
-import streamlit as st
+import unicodedata
+from pathlib import Path
+
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
+import streamlit as st
 
-st.set_page_config(
-    page_title="Produits les plus performants",
-    page_icon="🏆",
-    layout="wide"
-)
+
+def normalize_name(name: str) -> str:
+    txt = unicodedata.normalize("NFKD", str(name))
+    txt = txt.encode("ascii", "ignore").decode("ascii")
+    return txt.strip().lower()
+
+
+def find_column(df: pd.DataFrame, target: str) -> str:
+    target_norm = normalize_name(target)
+    for col in df.columns:
+        if normalize_name(col) == target_norm:
+            return col
+    raise ValueError(f"Colonne introuvable: {target}")
+
 
 st.title("🏆 Les produits les plus performants")
 st.markdown(
@@ -17,7 +28,19 @@ st.markdown(
 
 @st.cache_data
 def load_data():
-    df = pd.read_excel("dataset_ventes_magasin.xlsx")
+    data_file = Path(__file__).resolve().parents[1] / "data" / "dataset_ventes_magasin.xlsx"
+    raw = pd.read_excel(data_file)
+    rename_map = {
+        find_column(raw, "Date de vente"): "Date de vente",
+        find_column(raw, "Nom du produit"): "Nom du produit",
+        find_column(raw, "Categorie"): "Catégorie",
+        find_column(raw, "Quantite vendue"): "Quantité vendue",
+        find_column(raw, "Prix unitaire"): "Prix unitaire",
+        find_column(raw, "Ville"): "Ville",
+        find_column(raw, "Canal de vente"): "Canal de vente",
+        find_column(raw, "Client"): "Client",
+    }
+    df = raw.rename(columns=rename_map)
     df["Date de vente"] = pd.to_datetime(df["Date de vente"], errors="coerce", dayfirst=True)
     df["Quantité vendue"] = pd.to_numeric(df["Quantité vendue"], errors="coerce")
     df["Prix unitaire"] = pd.to_numeric(df["Prix unitaire"], errors="coerce")
