@@ -66,7 +66,7 @@ top_clients = (
 st.dataframe(top_clients, use_container_width=True)
 st.caption("Ce tableau presente les clients qui achetent le plus et ceux qui rapportent le plus de CA.")
 
-st.subheader("Interpretation simple")
+st.subheader("Interpretation")
 canal_top = canal_count.index[0] if not canal_count.empty else "N/A"
-st.write(f"Observation: le canal le plus utilise est **{canal_top}**.")
-st.write("Action recommandee: renforcer les offres sur ce canal et tester des promotions sur les canaux moins utilises.")
+st.write(f"Observation: le canal le plus utilisé est **{canal_top}**.")
+st.write("Action recommandée: renforcer les offres sur ce canal et tester des promotions sur les canaux moins utilises.")
