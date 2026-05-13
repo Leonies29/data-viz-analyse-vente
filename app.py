@@ -14,7 +14,7 @@ st.set_page_config(
 # =====================================================
 @st.cache_data
 def load_data():
-    df = pd.read_excel("dataset_ventes_magasin.xlsx")
+    df = pd.read_excel("data/dataset_ventes_magasin.xlsx")
     df["Date de vente"] = pd.to_datetime(df["Date de vente"], errors="coerce", dayfirst=True)
     df["Quantité vendue"] = pd.to_numeric(df["Quantité vendue"], errors="coerce")
     df["Prix unitaire"] = pd.to_numeric(df["Prix unitaire"], errors="coerce")
