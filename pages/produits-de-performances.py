@@ -28,19 +28,7 @@ st.markdown(
 
 @st.cache_data
 def load_data():
-    data_file = Path(__file__).resolve().parents[1] / "data" / "dataset_ventes_magasin.xlsx"
-    raw = pd.read_excel(data_file)
-    rename_map = {
-        find_column(raw, "Date de vente"): "Date de vente",
-        find_column(raw, "Nom du produit"): "Nom du produit",
-        find_column(raw, "Categorie"): "Catégorie",
-        find_column(raw, "Quantite vendue"): "Quantité vendue",
-        find_column(raw, "Prix unitaire"): "Prix unitaire",
-        find_column(raw, "Ville"): "Ville",
-        find_column(raw, "Canal de vente"): "Canal de vente",
-        find_column(raw, "Client"): "Client",
-    }
-    df = raw.rename(columns=rename_map)
+    df = pd.read_excel("data/dataset_ventes_magasin.xlsx")
     df["Date de vente"] = pd.to_datetime(df["Date de vente"], errors="coerce", dayfirst=True)
     df["Quantité vendue"] = pd.to_numeric(df["Quantité vendue"], errors="coerce")
     df["Prix unitaire"] = pd.to_numeric(df["Prix unitaire"], errors="coerce")
