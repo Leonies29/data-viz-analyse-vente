@@ -165,10 +165,8 @@ st.markdown(
 
 st.divider()
 
-st.markdown("#### Synthèse — fil conducteur pour l’oral")
+st.markdown("#### Synthèse")
 canal_top = canal_count.index[0] if not canal_count.empty else "—"
 st.success(
-    f"**Message clé :** sur cette vue, le canal dominant est **{canal_top}**. "
-    "Vous pouvez enchaîner sur une recommandation : renforcer ce canal tout en testant "
-    "des leviers ciblés sur les canaux secondaires (offres, parcours, communication)."
+    f"Sur cette vue, le canal dominant est **{canal_top}**."
 )
