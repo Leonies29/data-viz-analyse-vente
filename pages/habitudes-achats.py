@@ -1,7 +1,11 @@
-import streamlit as st
-import pandas as pd
-from pathlib import Path
 import unicodedata
+from pathlib import Path
+
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
+DATA_FILE = Path(__file__).resolve().parents[1] / "data" / "dataset_ventes_magasin.xlsx"
 
 
 def normalize_name(name: str) -> str:
@@ -18,155 +22,255 @@ def find_column(df: pd.DataFrame, target: str) -> str:
     raise ValueError(f"Colonne introuvable: {target}")
 
 
+@st.cache_data
+def load_data():
+    raw = pd.read_excel(DATA_FILE)
+    df = raw.rename(
+        columns={
+            find_column(raw, "Date de vente"): "date",
+            find_column(raw, "Nom du produit"): "produit",
+            find_column(raw, "Categorie"): "categorie",
+            find_column(raw, "Quantite vendue"): "quantite",
+            find_column(raw, "Prix unitaire"): "prix",
+            find_column(raw, "Ville"): "ville",
+            find_column(raw, "Canal de vente"): "canal",
+            find_column(raw, "Client"): "client",
+        }
+    )
+    # Ne pas utiliser dayfirst=True : les dates ISO (2024-02-03) deviennent invalides.
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df["quantite"] = pd.to_numeric(df["quantite"], errors="coerce")
+    df["prix"] = pd.to_numeric(df["prix"], errors="coerce")
+    df = df.dropna(subset=["date", "quantite", "prix"]).copy()
+    df["ca"] = df["quantite"] * df["prix"]
+    df["mois"] = df["date"].dt.to_period("M").astype(str)
+    return df
+
+
+st.title("👥 Habitudes d'achat des clients")
 st.markdown(
-    """
-    <style>
-    .block-container { padding-top: 1.5rem; }
-    div[data-testid="stMetric"] {
-        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-        border: 1px solid #e2e8f0;
-        border-radius: 10px;
-        padding: 12px 16px;
-    }
-    .story-lead {
-        font-size: 1.05rem;
-        line-height: 1.65;
-        color: #334155;
-        margin-bottom: 0.5rem;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
+    "Comment et quand les clients achètent-ils ? Cette page analyse les **canaux** privilégiés, "
+    "le **rythme** des achats dans le temps et les **clients** les plus actifs."
 )
 
-data_file = Path(__file__).resolve().parents[1] / "data" / "dataset_ventes_magasin.xlsx"
-df_raw = pd.read_excel(data_file)
-
-date_col = find_column(df_raw, "Date de vente")
-qte_col = find_column(df_raw, "Quantite vendue")
-prix_col = find_column(df_raw, "Prix unitaire")
-canal_col = find_column(df_raw, "Canal de vente")
-client_col = find_column(df_raw, "Client")
-ville_col = find_column(df_raw, "Ville")
-
-df_raw[date_col] = pd.to_datetime(df_raw[date_col], errors="coerce")
-df_raw = df_raw.dropna(subset=[date_col]).copy()
-df_raw["CA"] = df_raw[qte_col] * df_raw[prix_col]
-df_raw["Mois"] = df_raw[date_col].dt.to_period("M").astype(str)
-
-with st.sidebar:
-    st.markdown("### Filtres")
-    st.caption("Affinez l’analyse pour votre argumentaire oral.")
-    villes = ["Toutes les villes"] + sorted(
-        df_raw[ville_col].dropna().astype(str).unique().tolist()
-    )
-    ville_selectionnee = st.selectbox("Ville", villes)
-    st.divider()
-    st.caption(
-        "Les graphiques et indicateurs se mettent à jour automatiquement."
-    )
-
-if ville_selectionnee != "Toutes les villes":
-    df = df_raw[df_raw[ville_col].astype(str) == ville_selectionnee].copy()
-else:
-    df = df_raw.copy()
-
-st.title("Habitudes d’achat")
-if df.empty:
-    st.warning("Aucune transaction pour cette sélection. Choisissez une autre ville.")
+if not DATA_FILE.exists():
+    st.error(f"Fichier introuvable : {DATA_FILE}")
     st.stop()
 
-st.markdown(
-    '<p class="story-lead">Cette page répond à une question simple : '
-    "<strong>comment et quand les clients achètent-ils ?</strong> "
-    "Elle structure votre storytelling en trois temps : le canal, le rythme dans le temps, "
-    "puis les clients les plus engagés.</p>",
-    unsafe_allow_html=True,
+try:
+    df = load_data()
+except Exception as err:
+    st.error(f"Erreur de chargement des données : {err}")
+    st.stop()
+
+if df.empty:
+    st.warning("Le fichier Excel ne contient aucune ligne exploitable après nettoyage.")
+    st.stop()
+
+st.sidebar.header("Filtres")
+categories = st.sidebar.multiselect(
+    "Catégorie",
+    sorted(df["categorie"].dropna().astype(str).unique()),
+    default=sorted(df["categorie"].dropna().astype(str).unique()),
+)
+canaux = st.sidebar.multiselect(
+    "Canal de vente",
+    sorted(df["canal"].dropna().astype(str).unique()),
+    default=sorted(df["canal"].dropna().astype(str).unique()),
+)
+villes = st.sidebar.multiselect(
+    "Ville",
+    sorted(df["ville"].dropna().astype(str).unique()),
+    default=sorted(df["ville"].dropna().astype(str).unique()),
 )
 
-c1, c2, c3, c4 = st.columns(4)
-with c1:
-    st.metric("Transactions", f"{len(df):,}".replace(",", " "))
-with c2:
-    st.metric("Chiffre d’affaires", f"{df['CA'].sum():,.0f} €".replace(",", " "))
-with c3:
-    st.metric("Clients distincts", f"{df[client_col].nunique():,}".replace(",", " "))
-with c4:
-    st.metric(
-        "Panier moyen (CA / achat)",
-        f"{df['CA'].mean():,.0f} €".replace(",", " ") if len(df) else "—",
+if not categories or not canaux or not villes:
+    st.warning(
+        "Sélectionnez au moins une valeur dans chaque filtre (Catégorie, Canal, Ville) "
+        "pour afficher les graphiques."
+    )
+    st.stop()
+
+df_filtre = df[
+    df["categorie"].isin(categories)
+    & df["canal"].isin(canaux)
+    & df["ville"].isin(villes)
+]
+
+if df_filtre.empty:
+    st.warning("Aucune donnée pour cette combinaison de filtres.")
+    st.stop()
+
+st.divider()
+
+# =====================================================
+# ÉTAPE 1 — CANAUX D'ACHAT
+# =====================================================
+st.header("1. Par quel canal les clients achètent-ils ?")
+
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("Transactions", f"{len(df_filtre):,}".replace(",", " "))
+col2.metric("Chiffre d'affaires", f"{df_filtre['ca'].sum():,.0f} €".replace(",", " "))
+col3.metric("Clients distincts", f"{df_filtre['client'].nunique():,}".replace(",", " "))
+col4.metric("Panier moyen", f"{df_filtre['ca'].mean():,.0f} €".replace(",", " "))
+
+canal_tx = df_filtre["canal"].value_counts().reset_index()
+canal_tx.columns = ["canal", "transactions"]
+
+canal_ca = df_filtre.groupby("canal", as_index=False)["ca"].sum()
+
+col_g, col_d = st.columns(2)
+
+fig_tx = px.bar(
+    canal_tx.sort_values("transactions", ascending=True),
+    x="transactions",
+    y="canal",
+    orientation="h",
+    text="transactions",
+    title="Nombre de transactions par canal",
+    color="transactions",
+    color_continuous_scale="Greens",
+)
+fig_tx.update_traces(textposition="outside")
+fig_tx.update_layout(showlegend=False, coloraxis_showscale=False, yaxis_title="", xaxis_title="")
+col_g.plotly_chart(fig_tx, use_container_width=True)
+
+fig_ca = px.bar(
+    canal_ca.sort_values("ca", ascending=True),
+    x="ca",
+    y="canal",
+    orientation="h",
+    text="ca",
+    title="Chiffre d'affaires par canal (€)",
+    color="ca",
+    color_continuous_scale="Blues",
+)
+fig_ca.update_traces(texttemplate="%{text:,.0f} €", textposition="outside")
+fig_ca.update_layout(
+    showlegend=False,
+    coloraxis_showscale=False,
+    yaxis_title="",
+    xaxis_title="Chiffre d'affaires (€)",
+)
+col_d.plotly_chart(fig_ca, use_container_width=True)
+
+if not canal_tx.empty:
+    top_tx = canal_tx.loc[canal_tx["transactions"].idxmax(), "canal"]
+    top_ca = canal_ca.loc[canal_ca["ca"].idxmax(), "canal"]
+    part_tx = 100 * canal_tx["transactions"].max() / canal_tx["transactions"].sum()
+    part_ca = 100 * canal_ca["ca"].max() / canal_ca["ca"].sum()
+    st.markdown(
+        f"**Lecture :** **{top_tx}** mène en volume ({part_tx:.0f} % des transactions). "
+        f"En CA, le leader est **{top_ca}** ({part_ca:.0f} % du total). "
+        + (
+            "Volume et valeur vont dans le même sens."
+            if top_tx == top_ca
+            else "Le canal le plus utilisé n'est pas forcément le plus rentable."
+        )
     )
 
 st.divider()
 
-st.markdown("#### 1 · Par quel canal les clients préfèrent-ils acheter ?")
-col_chart, col_txt = st.columns([1.1, 1])
-with col_chart:
-    canal_count = df[canal_col].value_counts()
-    st.bar_chart(canal_count)
-with col_txt:
-    if not canal_count.empty:
-        top_canal = canal_count.index[0]
-        part = 100 * canal_count.iloc[0] / canal_count.sum()
-        st.markdown(
-            f"**Lecture :** le canal **{top_canal}** concentre environ "
-            f"**{part:.0f} %** des transactions sur la sélection actuelle."
-        )
-        st.markdown(
-            "_À l’oral : expliquez pourquoi ce canal peut refléter des habitudes "
-            "(confort, confiance, urgence, etc.)._"
-        )
-    else:
-        st.info("Pas de données pour cette sélection.")
+# =====================================================
+# ÉTAPE 2 — RYTHME DANS LE TEMPS
+# =====================================================
+st.header("2. Le rythme des achats dans le temps")
+
+ca_mensuel = df_filtre.groupby("mois", as_index=False)["ca"].sum().sort_values("mois")
+
+fig_evo = px.line(
+    ca_mensuel,
+    x="mois",
+    y="ca",
+    markers=True,
+    title="Évolution mensuelle du chiffre d'affaires",
+)
+fig_evo.update_layout(xaxis_title="Mois", yaxis_title="Chiffre d'affaires (€)")
+st.plotly_chart(fig_evo, use_container_width=True)
+
+if len(ca_mensuel) >= 1:
+    row_max = ca_mensuel.loc[ca_mensuel["ca"].idxmax()]
+    row_min = ca_mensuel.loc[ca_mensuel["ca"].idxmin()]
+    st.markdown(
+        f"**Lecture :** pic en **{row_max['mois']}** ({row_max['ca']:,.0f} €), "
+        f"creux en **{row_min['mois']}** ({row_min['ca']:,.0f} €)."
+    )
 
 st.divider()
 
-st.markdown("#### 2 · Le rythme des achats dans le temps")
-ca_mensuel = df.groupby("Mois", as_index=True)["CA"].sum().sort_index()
-st.line_chart(ca_mensuel)
-st.markdown(
-    "**Lecture :** repérez les mois en surperformance ou en creux pour relier "
-    "éventuellement à une saisonnalité ou à des campagnes."
-)
-st.caption(
-    "À l’oral : annoncez 1–2 pics ou baisses marquants et proposez une hypothèse prudente "
-    "(sans affirmer une cause si les données ne la contiennent pas)."
-)
+# =====================================================
+# ÉTAPE 3 — CLIENTS LES PLUS ACTIFS
+# =====================================================
+st.header("3. Qui achète le plus souvent et génère le plus de CA ?")
 
-st.divider()
-
-st.markdown("#### 3 · Qui achète le plus souvent et génère le plus de CA ?")
 top_clients = (
-    df.groupby(client_col, as_index=False)
-    .agg(
-        nb_achats=(client_col, "count"),
-        quantite_totale=(qte_col, "sum"),
-        ca_total=("CA", "sum"),
-    )
-    .sort_values(["nb_achats", "ca_total"], ascending=False)
+    df_filtre.groupby("client", as_index=False)
+    .agg(nb_achats=("client", "count"), quantite=("quantite", "sum"), ca=("ca", "sum"))
+    .sort_values(["nb_achats", "ca"], ascending=False)
     .head(10)
 )
-st.dataframe(
-    top_clients.rename(
-        columns={
-            client_col: "Client",
-            "nb_achats": "Nb d’achats",
-            "quantite_totale": "Quantité totale",
-            "ca_total": "CA total (€)",
-        }
-    ),
-    use_container_width=True,
-    hide_index=True,
+
+col_chart, col_table = st.columns([1.4, 1])
+
+fig_clients = px.bar(
+    top_clients.sort_values("ca", ascending=True),
+    x="ca",
+    y="client",
+    orientation="h",
+    text="ca",
+    title="Top 10 — CA par client (€)",
+    color="ca",
+    color_continuous_scale="Blues",
 )
-st.markdown(
-    "**Lecture :** distinguez la **fréquence** (nombre d’achats) du **volume économique** (CA). "
-    "Un client peut acheter souvent sans être le plus rentable, et inversement."
+fig_clients.update_traces(texttemplate="%{text:,.0f} €", textposition="outside")
+fig_clients.update_layout(
+    showlegend=False,
+    coloraxis_showscale=False,
+    yaxis_title="",
+    xaxis_title="Chiffre d'affaires (€)",
 )
+col_chart.plotly_chart(fig_clients, use_container_width=True)
+
+with col_table:
+    st.dataframe(
+        top_clients.rename(
+            columns={
+                "nb_achats": "Nb d'achats",
+                "quantite": "Quantité",
+                "ca": "CA total (€)",
+            }
+        ),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+if len(top_clients) >= 2:
+    top_freq = top_clients.iloc[0]["client"]
+    top_ca_client = top_clients.sort_values("ca", ascending=False).iloc[0]["client"]
+    if top_freq != top_ca_client:
+        st.markdown(
+            f"**Lecture :** **{top_freq}** achète le plus souvent, "
+            f"mais **{top_ca_client}** génère le plus de CA."
+        )
+    else:
+        st.markdown(f"**Lecture :** **{top_freq}** est le plus actif et le plus rentable.")
 
 st.divider()
 
-st.markdown("#### Synthèse")
-canal_top = canal_count.index[0] if not canal_count.empty else "—"
-st.success(
-    f"Sur cette vue, le canal dominant est **{canal_top}**."
+# =====================================================
+# ÉTAPE 4 — SYNTHÈSE
+# =====================================================
+st.header("4. Synthèse et pistes d'action")
+
+canal_top = canal_tx.loc[canal_tx["transactions"].idxmax(), "canal"] if not canal_tx.empty else "—"
+clients_recurrents = int((df_filtre.groupby("client").size() > 1).sum())
+nb_clients = df_filtre["client"].nunique()
+
+st.markdown(
+    f"""
+    Canal dominant (transactions) : **{canal_top}**.  
+    **{clients_recurrents}** clients sur **{nb_clients}** ont acheté plus d'une fois.
+
+    **Pistes :** renforcer le canal leader, adapter par ville, fidéliser les clients à fort CA.
+    """
 )
