@@ -2,12 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-st.set_page_config(
-    page_title="Tendances commerciales",
-    page_icon="📈",
-    layout="wide"
-)
-
 st.title("Analyse des tendances commerciales")
 
 st.markdown(
@@ -19,7 +13,7 @@ st.markdown(
 def load_data():
     df = pd.read_excel("data/dataset_ventes_magasin.xlsx")
 
-    df["Date de vente"] = pd.to_datetime(df["Date de vente"], errors="coerce", dayfirst=True)
+    df["Date de vente"] = pd.to_datetime(df["Date de vente"], errors="coerce")
     df["Quantité vendue"] = pd.to_numeric(df["Quantité vendue"], errors="coerce")
     df["Prix unitaire"] = pd.to_numeric(df["Prix unitaire"], errors="coerce")
 
