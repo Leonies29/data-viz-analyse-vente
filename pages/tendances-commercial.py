@@ -5,7 +5,7 @@ import plotly.express as px
 st.title("Analyse des tendances commerciales")
 
 st.markdown(
-    "Cette application analyse l'évolution des ventes à partir du chiffre d'affaires, "
+    "Cette page analyse l'évolution des ventes à partir du chiffre d'affaires, "
     "des quantités vendues, des canaux de vente et des catégories de produits."
 )
 
@@ -85,6 +85,7 @@ fig_ca = px.line(
 )
 fig_ca.update_layout(xaxis_title="Mois", yaxis_title="Chiffre d'affaires (€)")
 st.plotly_chart(fig_ca, use_container_width=True)
+st.caption("Le chiffre d’affaires progresse jusqu’à son meilleur niveau, puis diminue sur les mois suivants.")
 
 col_gauche, col_droite = st.columns(2)
 
@@ -96,6 +97,7 @@ fig_quantite = px.bar(
 )
 fig_quantite.update_layout(xaxis_title="Mois", yaxis_title="Quantité vendue")
 col_gauche.plotly_chart(fig_quantite, use_container_width=True)
+col_gauche.caption("Les quantités vendues suivent globalement la même tendance que le chiffre d’affaires.")
 
 ca_canal = (
     df_filtre
@@ -114,6 +116,7 @@ fig_canal = px.bar(
 )
 fig_canal.update_layout(xaxis_title="Mois", yaxis_title="Chiffre d'affaires (€)")
 col_droite.plotly_chart(fig_canal, use_container_width=True)
+col_droite.caption("Ce graphique permet d’identifier les canaux de vente qui contribuent le plus aux revenus.")
 
 ca_categorie = (
     df_filtre
@@ -132,6 +135,7 @@ fig_categorie = px.bar(
 )
 fig_categorie.update_layout(xaxis_title="Mois", yaxis_title="Chiffre d'affaires (€)")
 st.plotly_chart(fig_categorie, use_container_width=True)
+st.caption("La comparaison par catégorie montre quelles familles de produits soutiennent le plus la performance commerciale.")
 
 st.subheader("Conclusion")
 
